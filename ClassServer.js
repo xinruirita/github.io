@@ -1,3 +1,6 @@
+//API GET: http://localhost:13001/soils
+//API POST: http://localhost:13001/api/soils
+
 // include any libraries
 const express = require('express');  // include the express library 
 // declare any global variables:
