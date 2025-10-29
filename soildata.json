@@ -1,0 +1,36 @@
+
+let soils = [
+	{
+		"id": 1,
+		"Location": "SW Entrance",
+		"pH": 9.0,
+		"metal_content": {
+			"Pb": 230,
+			"Cu": 187,
+			"As": 34,
+			"Zu": 131
+		}
+	},
+	{
+		"id": 2,
+		"Location": "NE Entrance",
+		"pH": 8.0,
+		"metal_content": {
+			"Pb": 141,
+			"Cu": 146,
+			"As": 27,
+			"Zu": 136
+		}
+	},
+	{
+		"id": 3,
+		"Location": "SE Entrance",
+		"pH": 10.0,
+		"metal_content": {
+			"Pb": 534,
+			"Cu": 249,
+			"As": 62,
+			"Zu": 268
+		}
+	},
+]
