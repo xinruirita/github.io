@@ -26,11 +26,11 @@ server.get('/', (req, res) => {
 
 // Define a route for HTTP GET requests to ('/api/soils')
 // this route returns the list of products in JSON format
-server.get('/api/soils', (req, res) => {
+server.get('/soils', (req, res) => {
 	res.json(soils); // send an array as a JSON response
 });
 
-server.post('/soils', (req, res) => {
+server.post('/api/soils', (req, res) => {
 
 	//create qa JSON object from the request body
 	const { Location, pH, metal_content } = req.body;
