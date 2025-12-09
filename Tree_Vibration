@@ -1,0 +1,218 @@
+#include <Wire.h>
+#include <Adafruit_LIS3DH.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_Sensor.h>
+#include <SD.h>
+#include <math.h>
+
+// 麦克风引脚
+// 传感器对象
+#define MIC_PIN A0
+#define SAMPLE_WINDOW 50
+#define SD_CS 10
+
+
+Adafruit_LIS3DH lis = Adafruit_LIS3DH();
+Adafruit_BME280 bme;
+
+// valids
+
+// reduce bias from the environment
+float pressureLast = 0;
+float humidityLast = 0;
+float pressureAvg = 0;
+float humidityAvg = 0;
+unsigned long lastEventTime = 0;
+
+//
+const float vibThresh = 0.3;
+const int soundThresh = 25;
+const float windPressureChange = 0.1; // hPa
+const float windHumidityChange = 1.0; // %
+
+File dataFile;
+
+void setup() {
+  Serial.begin(115200);
+  delay(1500);
+
+  Serial.println("Start");
+  
+  // LIS3DH
+  if (!lis.begin(0x18)) {
+    if (!lis.begin(0x19)) {
+      Serial.println("LIS not found");
+      while (1);
+    }
+  }
+  lis.setRange(LIS3DH_RANGE_2_G);
+  Serial.println("LIS Ready");
+  
+  // BME280
+  if (!bme.begin(0x76)) {
+    if (!bme.begin(0x77)) {
+      Serial.println("BME not Found");
+    } else{
+      Serial.println("BME Ready");
+      pressureLast = bme.readPressure() / 100.0F;
+      humidityLast = bme.readHumidity();
+      pressureAvg = pressureLast;
+      humidityAvg = humidityLast;
+    }
+  }
+  
+  // SD card
+  if (!SD.begin()) {
+    Serial.println("SD init failed!");
+    while (1);
+  }
+  Serial.println("SD Ready");
+  // dataFile = SD.open("TREEVIB.TXT", FILE_WRITE);
+
+
+  appendFile(SD, "/TREEVIB.txt", "Vibration,SoundLevel,Pressure(hPa),Humidity(%),WindActive\n");
+
+  // if (dataFile) {
+  //   Serial.print("writing...");
+  //   dataFile.println("timestamp_ms,vibration,soundLevel,pressure,humidity,windActive");
+  //   dataFile.close();
+  //   Serial.println ("Done");
+  // } else{
+  //   Serial.println ("error");
+  // }
+
+  //Serial.println(" Vibration | Sound | Temperature | Humidity | Pressure");
+}
+
+char buffer[100];
+long datarows = 100;
+
+void loop() {
+  // LIS3DH
+  sensors_event_t event;
+  lis.getEvent(&event);
+  float vib_x = event.acceleration.x;
+  float vib_y = event.acceleration.y;
+  float vib_z = event.acceleration.z;
+  float vibration = abs(sqrt(vib_x*vib_x + vib_y*vib_y + vib_z*vib_z) - 9.81);
+  
+  // 读取麦克风
+  unsigned long startMillis = millis();
+  int signalMax = 0;
+  int signalMin = 4095;
+  
+  while (millis() - startMillis < SAMPLE_WINDOW) {
+    int sample = analogRead(MIC_PIN);
+    if (sample > signalMax) signalMax = sample;
+    if (sample < signalMin) signalMin = sample;
+  }
+  int soundLevel = signalMax - signalMin;
+  
+  // BME280
+  float pressureNow = bme.readPressure() / 100.0F;
+  float humidityNow = bme.readHumidity();
+
+  // calculate the changes of Pressure/Humidity
+  float pressureChange = abs(pressureNow - pressureLast);
+  float humidityChange = abs(humidityNow - humidityLast);
+  pressureLast = pressureNow;
+  humidityLast = humidityNow;
+
+  pressureAvg = (pressureAvg * 9 + pressureNow) / 10.0;
+  humidityAvg = (humidityAvg * 9 + humidityNow) / 10.0;
+
+
+  if (datarows > 0) {
+    bool windActive = (pressureChange > windPressureChange || humidityChange > windHumidityChange);
+    Serial.print("V:");
+    Serial.print(vibration, 3);
+    Serial.print(" | S:");
+    Serial.print(soundLevel);
+    Serial.print(" | P:");
+    Serial.print(pressureNow, 1);
+    Serial.print("hPa | H:");
+    Serial.print(humidityNow, 0);
+    Serial.print("% | Wind:");
+    Serial.print(windActive ? "WOWO": " ");
+    Serial.print(" | Record: ");
+
+    
+    // record
+    unsigned long now = millis();
+
+    if (vibration > vibThresh && soundLevel > soundThresh && !windActive) {
+
+        datarows--;
+
+        sprintf(buffer, "%.1f, ", vibration);
+        appendFile(SD, "/TREEVIB.txt", buffer);
+
+        sprintf(buffer, "%d, ", soundLevel);
+        appendFile(SD, "/TREEVIB.txt", buffer);
+
+        sprintf(buffer, "%.1f, ", pressureNow);
+        appendFile(SD, "/TREEVIB.txt", buffer);
+
+        sprintf(buffer, "%.3f, ", humidityNow);
+        appendFile(SD, "/TREEVIB.txt", buffer);
+
+        appendFile(SD, "/TREEVIB.txt", windActive ? "wind" : "no wind");
+        appendFile(SD, "/TREEVIB.txt", "\n");
+
+        // Serial.println("Recording: Sound + Vibration");
+
+        // dataFile = SD.open("TREEVIB.TXT", FILE_WRITE);
+        // if (dataFile) {
+        //   dataFile.print(now);
+        //   dataFile.print(",");
+        //   dataFile.print(vibration, 3);
+        //   dataFile.print(",");
+        //   dataFile.print(soundLevel);
+        //   dataFile.print(",");
+        //   dataFile.print(pressureNow, 1);
+        //   dataFile.print(",");
+        //   dataFile.print(humidityNow, 0);
+        //   dataFile.print(",");
+        //   dataFile.println(windActive ? 1 : 0);
+        //   dataFile.close();
+        // }
+    } else {
+      Serial.println("—");
+    }
+    delay(100);
+  } else {
+    delay(5000);
+  }
+}
+
+void writeFile(fs::FS &fs, const char * path, const char * message){
+    Serial.printf("Writing file: %s\n", path);
+
+    File file = fs.open(path, FILE_WRITE);
+    if(!file){
+        Serial.println("Failed to open file for writing");
+        return;
+    }
+    if(file.print(message)){
+        Serial.println("File written");
+    } else {
+        Serial.println("Write failed");
+    }
+    file.close();
+}
+
+void appendFile(fs::FS &fs, const char * path, const char * message){
+    Serial.printf("Appending to file: %s\n", path);
+
+    File file = fs.open(path, FILE_APPEND);
+    if(!file){
+        Serial.println("Failed to open file for appending");
+        return;
+    }
+    if(file.print(message)){
+        Serial.println("Message appended");
+    } else {
+        Serial.println("Append failed");
+    }
+    file.close();
+}
